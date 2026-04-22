@@ -10,8 +10,8 @@ class Usuario {
 
     // --- LOGIN MEJORADO ---
     public function login($email, $password) {
-        // Obtenemos también el ROL y el ESTADO
-        $query = "SELECT id, nombre, password, rol, estado 
+        // Ahora obtenemos también datos de 2FA
+        $query = "SELECT id, nombre, password, rol, estado, two_factor_enabled, two_factor_secret, two_factor_confirmed_at
                   FROM " . $this->table_name . " 
                   WHERE email = :email LIMIT 1";
         
