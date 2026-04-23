@@ -1,4 +1,6 @@
 <?php
+require_once '../app/lib/CryptoHelper.php';
+
 class Usuario {
     private $conn;
     private $table_name = "usuarios";
@@ -10,8 +12,8 @@ class Usuario {
 
     // --- LOGIN MEJORADO ---
     public function login($email, $password) {
-        // Obtenemos también el ROL y el ESTADO
-        $query = "SELECT id, nombre, password, rol, estado 
+        // Ahora obtenemos también datos de 2FA
+        $query = "SELECT id, nombre, password, rol, estado, two_factor_enabled, two_factor_secret, two_factor_confirmed_at
                   FROM " . $this->table_name . " 
                   WHERE email = :email LIMIT 1";
         
@@ -112,4 +114,37 @@ class Usuario {
         $stmt->bindParam(":id", $id);
         return $stmt->execute();
     }
+
+    public function guardarSecret2FA($id, $secret) {
+        $secretCifrado = CryptoHelper::encrypt($secret);
+
+        $query = "UPDATE " . $this->table_name . " 
+                SET two_factor_secret = :secret, two_factor_enabled = 0, two_factor_confirmed_at = NULL
+                WHERE id = :id";
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(":secret", $secretCifrado);
+        $stmt->bindParam(":id", $id);
+        return $stmt->execute();
+    }
+
+public function activar2FA($id) {
+    $query = "UPDATE " . $this->table_name . " 
+              SET two_factor_enabled = 1, two_factor_confirmed_at = NOW()
+              WHERE id = :id";
+    $stmt = $this->conn->prepare($query);
+    $stmt->bindParam(":id", $id);
+    return $stmt->execute();
+}
+
+public function desactivar2FA($id) {
+    $query = "UPDATE " . $this->table_name . " 
+              SET two_factor_enabled = 0, two_factor_secret = NULL, two_factor_confirmed_at = NULL
+              WHERE id = :id";
+    $stmt = $this->conn->prepare($query);
+    $stmt->bindParam(":id", $id);
+    return $stmt->execute();
+}
+
+
+
 }
