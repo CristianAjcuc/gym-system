@@ -1,5 +1,7 @@
 <?php
 require_once '../app/models/Usuario.php';
+require_once '../app/lib/TotpHelper.php';
+require_once '../app/lib/CryptoHelper.php';
 
 class AuthController {
     
@@ -99,7 +101,24 @@ class AuthController {
 
         // Aquí después validaremos el TOTP real
         // Por ahora dejamos una validación temporal para probar flujo
-        if ($codigo !== '123456') {
+        $usuarioModel = new Usuario();
+        $usuario = $usuarioModel->obtenerPorId($_SESSION['pending_2fa_user_id']);
+
+        if (!$usuario || empty($usuario['two_factor_secret'])) {
+            $error = "No se encontró configuración de doble factor para este usuario.";
+            require_once '../app/views/auth/verificar2fa.php';
+            return;
+        }
+
+        $secretPlano = CryptoHelper::decrypt($usuario['two_factor_secret']);
+
+        if (empty($secretPlano)) {
+            $error = "No se pudo leer la configuración de doble factor.";
+            require_once '../app/views/auth/verificar2fa.php';
+            return;
+        }
+
+        if (!TotpHelper::verifyCode($secretPlano, $codigo)) {
             $error = "Código de verificación inválido.";
             require_once '../app/views/auth/verificar2fa.php';
             return;
@@ -121,8 +140,85 @@ class AuthController {
     }
 
     public function logout() {
+
         session_destroy();
         header('Location: /auth/index');
         exit;
     }
+
+    public function configurar2fa() {
+    if (!isset($_SESSION['user_id'])) {
+        header('Location: /auth/index');
+        exit;
+    }
+
+    $usuarioModel = new Usuario();
+    $usuario = $usuarioModel->obtenerPorId($_SESSION['user_id']);
+
+    if (!$usuario) {
+        header('Location: /home/index');
+        exit;
+    }
+
+    // Si ya existe un secreto guardado, NO generar otro ni resetear 2FA
+    if (!empty($usuario['two_factor_secret'])) {
+        $secretPlano = CryptoHelper::decrypt($usuario['two_factor_secret']);
+
+        if (!empty($secretPlano)) {
+            $secret = $secretPlano;
+            $otpauth = TotpHelper::getOtpAuthUrl('GymSystem', $usuario['email'], $secretPlano);
+            require_once '../app/views/auth/configurar2fa.php';
+            return;
+        }
+    }
+
+    // Solo si no existe secreto, generar uno nuevo
+    $secret = TotpHelper::generateSecret();
+    $usuarioModel->guardarSecret2FA($usuario['id'], $secret);
+
+    $otpauth = TotpHelper::getOtpAuthUrl('GymSystem', $usuario['email'], $secret);
+
+    require_once '../app/views/auth/configurar2fa.php';
+}
+public function activar2fa() {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_SESSION['user_id'])) {
+        header('Location: /auth/index');
+        exit;
+    }
+
+    $codigo = trim($_POST['codigo'] ?? '');
+
+    $usuarioModel = new Usuario();
+    $usuario = $usuarioModel->obtenerPorId($_SESSION['user_id']);
+
+    if (!$usuario || empty($usuario['two_factor_secret'])) {
+        $error = "No existe un secreto configurado para activar el doble factor.";
+        require_once '../app/views/auth/configurar2fa.php';
+        return;
+    }
+
+    // Descifrar el secreto guardado en BD
+    $secretPlano = CryptoHelper::decrypt($usuario['two_factor_secret']);
+
+    if (empty($secretPlano)) {
+        $error = "No se pudo leer la configuración de doble factor.";
+        require_once '../app/views/auth/configurar2fa.php';
+        return;
+    }
+
+    // Reconstruir el QR SIEMPRE antes de volver a la vista
+    $otpauth = TotpHelper::getOtpAuthUrl('GymSystem', $usuario['email'], $secretPlano);
+
+    if (!TotpHelper::verifyCode($secretPlano, $codigo)) {
+        $error = "El código ingresado no es válido.";
+        require_once '../app/views/auth/configurar2fa.php';
+        return;
+    }
+
+    $usuarioModel->activar2FA($usuario['id']);
+    $_SESSION['success_message'] = "Doble factor activado correctamente.";
+    header('Location: /home/index');
+    exit;
+}
+
 }
