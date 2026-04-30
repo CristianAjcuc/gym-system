@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Verificación 2FA</title>
     <link rel="stylesheet" href="/public/assets/css/bootstrap.min.css">
+<?php $remainingBlockSeconds = $remainingBlockSeconds ?? 0; ?>
     <style>
         body {
             background: linear-gradient(90deg, #3b82f6, #9333ea);
@@ -49,6 +50,12 @@
                 </div>
             <?php endif; ?>
 
+            <?php if (!empty($remainingBlockSeconds)): ?>
+                <div class="alert alert-warning text-center">
+                    Quedan <strong><span id="block-countdown"><?= $remainingBlockSeconds ?></span> segundos</strong> para volver a intentar.
+                </div>
+            <?php endif; ?>
+
             <form method="POST" action="/auth/verificar2fa">
                 <div class="mb-3">
                     <label for="codigo" class="form-label">Código de 6 dígitos</label>
@@ -74,5 +81,38 @@
             </div>
         </div>
     </div>
+
+    <script>
+        const remainingBlockSeconds = <?= (int)$remainingBlockSeconds ?>;
+
+        if (remainingBlockSeconds > 0) {
+            const codeInput = document.getElementById('codigo');
+            const verifyButton = document.querySelector('button[type="submit"]');
+            const countdownDisplay = document.getElementById('block-countdown');
+            let secondsLeft = remainingBlockSeconds;
+
+            if (codeInput) codeInput.disabled = true;
+            if (verifyButton) {
+                verifyButton.disabled = true;
+                verifyButton.textContent = 'Espere...';
+            }
+
+            const interval = setInterval(() => {
+                secondsLeft -= 1;
+                if (countdownDisplay) {
+                    countdownDisplay.textContent = secondsLeft;
+                }
+
+                if (secondsLeft <= 0) {
+                    clearInterval(interval);
+                    if (codeInput) codeInput.disabled = false;
+                    if (verifyButton) {
+                        verifyButton.disabled = false;
+                        verifyButton.textContent = 'Verificar';
+                    }
+                }
+            }, 1000);
+        }
+    </script>
 </body>
 </html>

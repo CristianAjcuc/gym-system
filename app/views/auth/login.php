@@ -62,16 +62,16 @@ $config = Configuracion::getInfo();
                 <div class="alert alert-danger text-center"><?= $error ?></div>
             <?php endif; ?>
 
-            <form action="/auth/login" method="POST">
+            <form id="login-form" action="/auth/login" method="POST">
                 <div class="mb-3">
                     <label class="form-label text-secondary">Correo Electrónico</label>
-                    <input type="email" name="email" class="form-control form-control-lg" placeholder="admin@irongym.com" required>
+                    <input type="email" name="email" id="email" class="form-control form-control-lg" placeholder="admin@irongym.com" required>
                 </div>
                 <div class="mb-4">
                     <label class="form-label text-secondary">Contraseña</label>
-                    <input type="password" name="password" class="form-control form-control-lg" placeholder="******" required>
+                    <input type="password" name="password" id="password" class="form-control form-control-lg" placeholder="******" required>
                 </div>
-                <button type="submit" class="btn btn-primary w-100 btn-lg">INGRESAR</button>
+                <button type="submit" id="login-button" class="btn btn-primary w-100 btn-lg">INGRESAR</button>
             </form>
         </div>
         
