@@ -145,6 +145,67 @@ public function desactivar2FA($id) {
     return $stmt->execute();
 }
 
+public function obtenerIntentoLogin($email, $ip) {
+    $query = "SELECT * FROM login_attempts 
+              WHERE email = :email AND ip = :ip 
+              LIMIT 1";
+
+    $stmt = $this->conn->prepare($query);
+    $stmt->bindParam(":email", $email);
+    $stmt->bindParam(":ip", $ip);
+    $stmt->execute();
+
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+}
+
+public function registrarIntentoFallidoLogin($email, $ip, $attempts, $blockedUntil = null) {
+    $query = "INSERT INTO login_attempts (email, ip, attempts, blocked_until, last_attempt_at)
+              VALUES (:email, :ip, :attempts, :blocked_until, NOW())
+              ON DUPLICATE KEY UPDATE
+                  attempts = :attempts_update,
+                  blocked_until = :blocked_until_update,
+                  last_attempt_at = NOW()";
+
+    $stmt = $this->conn->prepare($query);
+    $stmt->bindParam(":email", $email);
+    $stmt->bindParam(":ip", $ip);
+    $stmt->bindParam(":attempts", $attempts);
+    $stmt->bindParam(":blocked_until", $blockedUntil);
+    $stmt->bindParam(":attempts_update", $attempts);
+    $stmt->bindParam(":blocked_until_update", $blockedUntil);
+
+    return $stmt->execute();
+}
+
+public function limpiarIntentosLogin($email, $ip) {
+    $query = "DELETE FROM login_attempts 
+              WHERE email = :email AND ip = :ip";
+
+    $stmt = $this->conn->prepare($query);
+    $stmt->bindParam(":email", $email);
+    $stmt->bindParam(":ip", $ip);
+
+    return $stmt->execute();
+}
+
+    public function registrarAuditoriaAuth($usuarioId, $email, $ip, $evento, $resultado, $detalle = null, $userAgent = null) {
+        $query = "INSERT INTO auth_audit_log 
+                (usuario_id, email, ip, evento, resultado, detalle, user_agent)
+                VALUES 
+                (:usuario_id, :email, :ip, :evento, :resultado, :detalle, :user_agent)";
+
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(":usuario_id", $usuarioId);
+        $stmt->bindParam(":email", $email);
+        $stmt->bindParam(":ip", $ip);
+        $stmt->bindParam(":evento", $evento);
+        $stmt->bindParam(":resultado", $resultado);
+        $stmt->bindParam(":detalle", $detalle);
+        $stmt->bindParam(":user_agent", $userAgent);
+
+        return $stmt->execute();
+}
+
 
 
 }
