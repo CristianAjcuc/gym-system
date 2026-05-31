@@ -1,5 +1,25 @@
 <?php
+
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'domain' => '',
+    'secure' => false, // Cambiar a true cuando tengas HTTPS
+    'httponly' => true,
+    'samesite' => 'Strict'
+]);
+
 session_start(); // <--- IMPORTANTE: Inicia las sesiones para todo el sistema
+
+// Token CSRF global para formularios POST
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+// Cabeceras de seguridad
+header("Content-Security-Policy: default-src 'self'; img-src 'self' https://api.qrserver.com data:; style-src 'self' https://cdn.jsdelivr.net https://cdn.datatables.net 'unsafe-inline'; script-src 'self' https://cdn.jsdelivr.net https://code.jquery.com https://cdn.datatables.net 'unsafe-inline'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self';");
+header("X-Frame-Options: DENY");
+header("X-Content-Type-Options: nosniff");
 
 require_once '../app/config/Database.php';
 
