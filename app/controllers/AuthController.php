@@ -77,6 +77,14 @@ class AuthController {
             exit;
         }
 
+        $remainingBlockSeconds = 0;
+        if (!empty($_SESSION['pending_2fa_block_until'])) {
+            $remainingBlockSeconds = max(0, $_SESSION['pending_2fa_block_until'] - time());
+            if ($remainingBlockSeconds === 0) {
+                unset($_SESSION['pending_2fa_block_until']);
+            }
+        }
+
         require_once '../app/views/auth/verificar2fa.php';
     }
 
@@ -89,6 +97,19 @@ class AuthController {
         if (!isset($_SESSION['pending_2fa_user_id'])) {
             header('Location: /auth/index');
             exit;
+        }
+
+        $now = time();
+        $remainingBlockSeconds = 0;
+        if (!empty($_SESSION['pending_2fa_block_until'])) {
+            $remainingBlockSeconds = max(0, $_SESSION['pending_2fa_block_until'] - $now);
+            if ($remainingBlockSeconds > 0) {
+                $error = "Demasiados intentos. Intente de nuevo en {$remainingBlockSeconds} segundos.";
+                require_once '../app/views/auth/verificar2fa.php';
+                return;
+            }
+
+            unset($_SESSION['pending_2fa_block_until']);
         }
 
         $codigo = trim($_POST['codigo'] ?? '');
@@ -119,13 +140,21 @@ class AuthController {
         }
 
         if (!TotpHelper::verifyCode($secretPlano, $codigo)) {
-            $error = "Código de verificación inválido.";
+            $attempts = (!empty($_SESSION['pending_2fa_failed_attempts']) ? $_SESSION['pending_2fa_failed_attempts'] : 0) + 1;
+            $_SESSION['pending_2fa_failed_attempts'] = $attempts;
+
+            $delays = [1 => 5, 2 => 30, 3 => 300];
+            $delay = $delays[$attempts] ?? 300;
+            $_SESSION['pending_2fa_block_until'] = $now + $delay;
+            $remainingBlockSeconds = $delay;
+
+            $error = "Código de verificación inválido. Intento {$attempts}. Intente de nuevo en {$delay} segundos.";
             require_once '../app/views/auth/verificar2fa.php';
             return;
         }
 
         // Si el código es válido, ahora sí se crea la sesión final
-        session_regenerate_id(true);
+        unset($_SESSION['pending_2fa_block_until'], $_SESSION['pending_2fa_failed_attempts']);
 
         $_SESSION['user_id'] = $_SESSION['pending_2fa_user_id'];
         $_SESSION['user_name'] = $_SESSION['pending_2fa_user_name'];
