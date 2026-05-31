@@ -42,60 +42,68 @@
     </style>
 </head>
 <body>
-    <div class="card card-2fa">
-        <div class="card-header-custom">
-            <h2>Configurar doble factor</h2>
-            <p class="mb-0">Escanee el código QR con Google Authenticator</p>
+           
+<div class="card card-2fa">
+    <div class="card-header-custom">
+        <h2>Configurar doble factor</h2>
+        <p class="mb-0">Escanee el código QR con su aplicación de autenticación</p>
+    </div>
+
+    <div class="card-body-custom">
+        <?php if (!empty($error)): ?>
+            <div class="alert alert-danger">
+                <?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?>
+            </div>
+        <?php endif; ?>
+
+        <div class="alert alert-info">
+            <h5 class="mb-2 text-center">¡Bienvenido a Gym System!</h5>
+            <p>Detectamos que esta es la primera vez que accede al sistema.</p>
+            <p>Para proteger su cuenta y la información del sistema, es necesario configurar la autenticación de doble factor (2FA).</p>
+            <ol class="mb-2">
+                <li>Abra su aplicación de autenticación en el teléfono.</li>
+                <li>Escanee el código QR mostrado a continuación.</li>
+                <li>Ingrese el código de 6 dígitos generado por la aplicación.</li>
+            </ol>
+            <p class="mb-0">Este proceso se realiza una única vez y permitirá un acceso más seguro a la plataforma.</p>
         </div>
 
-        <div class="card-body-custom">
-            <?php if (!empty($error)): ?>
-                <div class="alert alert-danger">
-                    <?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?>
-                </div>
+        <div class="text-center mb-3">
+            <?php if (!empty($otpauth)): ?>
+                <img
+                    src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=<?= urlencode($otpauth) ?>"
+                    alt="QR 2FA">
             <?php endif; ?>
+        </div>
 
-            <div class="text-center mb-3">
-                <?php if (!empty($otpauth)): ?>
-                    <div class="text-center mb-3">
-                        <img 
-                            src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=<?= urlencode($otpauth) ?>" 
-                            alt="QR 2FA">
-                    </div>
-                <?php endif; ?>
-
+        <div class="mb-3">
+            <label class="form-label">Clave secreta manual</label>
+            <div class="secret-box">
+                <?= htmlspecialchars($secret ?? $secretPlano ?? '', ENT_QUOTES, 'UTF-8') ?>
             </div>
+        </div>
 
+        <form method="POST" action="/auth/activar2fa">
             <div class="mb-3">
-                <label class="form-label">Clave secreta manual</label>
-                <div class="secret-box">
-                    <?= htmlspecialchars($secret ?? $secretPlano ?? '', ENT_QUOTES, 'UTF-8') ?>
-                </div>
+                <label for="codigo" class="form-label">Código generado por la app</label>
+                <input 
+                    type="text" 
+                    class="form-control" 
+                    id="codigo" 
+                    name="codigo" 
+                    maxlength="6" 
+                    required
+                    pattern="\d{6}"
+                    placeholder="123456">
             </div>
 
-            <form method="POST" action="/auth/activar2fa">
-                <div class="mb-3">
-                    <label for="codigo" class="form-label">Código generado por la app</label>
-                    <input 
-                        type="text" 
-                        class="form-control" 
-                        id="codigo" 
-                        name="codigo" 
-                        maxlength="6" 
-                        required
-                        pattern="\d{6}"
-                        placeholder="123456">
-                </div>
+            <button type="submit" class="btn btn-primary w-100">
+                Activar doble factor
+            </button>
+        </form>
 
-                <button type="submit" class="btn btn-primary w-100">
-                    Activar doble factor
-                </button>
-            </form>
-
-            <div class="mt-3 text-center">
-                <a href="/home/index">Cancelar</a>
-            </div>
+        <div class="mt-3 text-center">
+            <a href="/auth/logout">Cerrar sesión</a>
         </div>
     </div>
-</body>
-</html>
+</div>

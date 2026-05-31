@@ -90,4 +90,24 @@ class UsuariosController {
         $usuarioModel->cambiarEstado($id, $estado);
         header('Location: /usuarios/index');
     }
+
+    public function registrarAuditoriaAuth($usuarioId, $email, $ip, $evento, $resultado, $detalle = null, $userAgent = null) {
+        $query = "INSERT INTO auth_audit_log 
+                (usuario_id, email, ip, evento, resultado, detalle, user_agent)
+                VALUES 
+                (:usuario_id, :email, :ip, :evento, :resultado, :detalle, :user_agent)";
+
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(":usuario_id", $usuarioId);
+        $stmt->bindParam(":email", $email);
+        $stmt->bindParam(":ip", $ip);
+        $stmt->bindParam(":evento", $evento);
+        $stmt->bindParam(":resultado", $resultado);
+        $stmt->bindParam(":detalle", $detalle);
+        $stmt->bindParam(":user_agent", $userAgent);
+
+        return $stmt->execute();
+}
+
+
 }
