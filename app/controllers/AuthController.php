@@ -19,6 +19,18 @@ class AuthController {
 
     public function login() {
         if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+
+            if (
+                empty($_POST['csrf_token']) ||
+                empty($_SESSION['csrf_token']) ||
+                !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])
+            ) {
+                error_log("CSRF_DETECTADO IP=" . ($_SERVER['REMOTE_ADDR'] ?? 'N/A') . " RUTA=/auth/login");
+                http_response_code(403);
+                die('Solicitud no válida. Token CSRF incorrecto.');
+            }
+
+
             $email = trim($_POST['email'] ?? '');
             $password = $_POST['password'] ?? '';
             $ip = $_SERVER['REMOTE_ADDR'] ?? 'N/A';
