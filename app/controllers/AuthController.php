@@ -5,30 +5,38 @@ require_once '../app/lib/CryptoHelper.php';
 
 class AuthController {
 
-    public function index() {
-        $usuarioModel = new Usuario();
-        $usuarioModel->crearAdmin();
+        public function index() {
+            $usuarioModel = new Usuario();
+            $usuarioModel->crearAdmin();
 
-        if (isset($_SESSION['user_id'])) {
-            header('Location: /home/index');
-            exit;
+            if (isset($_SESSION['user_id'])) {
+                header('Location: /home/index');
+                exit;
+            }
+
+            if (empty($_SESSION['csrf_token'])) {
+                $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+            }
+
+            require_once '../app/views/auth/login.php';
         }
-
-        require_once '../app/views/auth/login.php';
-    }
 
     public function login() {
         if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
-            if (
-                empty($_POST['csrf_token']) ||
-                empty($_SESSION['csrf_token']) ||
-                !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])
-            ) {
-                error_log("CSRF_DETECTADO IP=" . ($_SERVER['REMOTE_ADDR'] ?? 'N/A') . " RUTA=/auth/login");
-                http_response_code(403);
-                die('Solicitud no válida. Token CSRF incorrecto.');
-            }
+                if (
+                    empty($_POST['csrf_token']) ||
+                    empty($_SESSION['csrf_token']) ||
+                    !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])
+                ) {
+                    error_log("CSRF_DETECTADO IP=" . ($_SERVER['REMOTE_ADDR'] ?? 'N/A') . " RUTA=/auth/login");
+
+                    unset($_SESSION['csrf_token']);
+                    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+
+                    http_response_code(403);
+                    die('Solicitud no válida. Token CSRF incorrecto.');
+                }
 
 
                 $email = trim($_POST['email'] ?? '');
