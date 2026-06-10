@@ -31,14 +31,125 @@ class AuthController {
             }
 
 
-            $email = trim($_POST['email'] ?? '');
-            $password = $_POST['password'] ?? '';
-            $ip = $_SERVER['REMOTE_ADDR'] ?? 'N/A';
-            $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? 'N/A';
+                $email = trim($_POST['email'] ?? '');
+                $password = $_POST['password'] ?? '';
+                $ip = $_SERVER['REMOTE_ADDR'] ?? 'N/A';
+                $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? 'N/A';
 
-            $usuarioModel = new Usuario();
+                $usuarioModel = new Usuario();
 
-            $intentoLogin = $usuarioModel->obtenerIntentoLogin($email, $ip);
+                /*
+                * Detección temprana de patrones SQL Injection.
+                * Esto va antes de filter_var(), porque un payload SQLi también será email inválido,
+                * pero queremos registrarlo como SQLI_DETECTADO y no solo INPUT_INVALIDO.
+                */
+                $sqliPatterns = [
+                    '/\bUNION\b/i',
+                    '/\bSELECT\b/i',
+                    '/\bINSERT\b/i',
+                    '/\bUPDATE\b/i',
+                    '/\bDELETE\b/i',
+                    '/\bDROP\b/i',
+                    '/\bSLEEP\s*\(/i',
+                    '/\bPG_SLEEP\s*\(/i',
+                    '/\bBENCHMARK\s*\(/i',
+                    '/\bWAITFOR\b/i',
+                    '/\bOR\s+1\s*=\s*1\b/i',
+                    '/\bAND\s+1\s*=\s*1\b/i',
+                    '/--/',
+                    '/#/',
+                    '/\/\*/',
+                    '/\*\//',
+                    '/;/'
+                ];
+
+                foreach ($sqliPatterns as $pattern) {
+                    if (preg_match($pattern, $email)) {
+                        error_log("SQLI_DETECTADO IP={$ip} EMAIL={$email} UA={$userAgent}");
+
+                        $usuarioModel->registrarAuditoriaAuth(
+                            null,
+                            $email,
+                            $ip,
+                            'SQLI_DETECTADO',
+                            'BLOQUEADO',
+                            'Patrón SQL Injection detectado en campo email',
+                            $userAgent
+                        );
+
+                        $error = "Solicitud inválida.";
+                        require_once '../app/views/auth/login.php';
+                        return;
+                    }
+                }
+
+                // Validación estricta de formato de correo antes de consultar BD o validar intentos
+                if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    error_log("INPUT_INVALIDO IP={$ip} EMAIL={$email} UA={$userAgent}");
+
+                    $usuarioModel->registrarAuditoriaAuth(
+                        null,
+                        $email,
+                        $ip,
+                        'INPUT_INVALIDO',
+                        'BLOQUEADO',
+                        'Formato de correo inválido en login',
+                        $userAgent
+                    );
+
+                    $error = "Formato de correo inválido.";
+                    require_once '../app/views/auth/login.php';
+                    return;
+                }
+
+                $intentoLogin = $usuarioModel->obtenerIntentoLogin($email, $ip);
+                    if ($usuarioModel->detectarAtaqueDistribuido(5, 20, 10, 5)) {
+                    error_log("ATAQUE_DISTRIBUIDO IP={$ip} EMAIL={$email}");
+
+                    $usuarioModel->registrarAuditoriaAuth(
+                        null,
+                        $email,
+                        $ip,
+                        'ATAQUE_DISTRIBUIDO',
+                        'BLOQUEADO',
+                        'Alto volumen de intentos fallidos contra múltiples cuentas e IPs.',
+                        $userAgent
+                    );
+
+                    $error = "Demasiados intentos detectados. Intente más tarde.";
+                    require_once '../app/views/auth/login.php';
+                    return;
+                }
+
+
+
+                $bloqueoEmail = $usuarioModel->obtenerBloqueoPorEmail($email);
+
+                if ($bloqueoEmail && !empty($bloqueoEmail['blocked_until'])) {
+                    $blockedUntilEmail = strtotime($bloqueoEmail['blocked_until']);
+
+                    if ($blockedUntilEmail > time()) {
+                        $remainingSeconds = $blockedUntilEmail - time();
+
+                        error_log("EMAIL_BLOQUEADO EMAIL={$email} IP={$ip} REMAINING_SECONDS={$remainingSeconds}");
+
+                        $usuarioModel->registrarAuditoriaAuth(
+                            null,
+                            $email,
+                            $ip,
+                            'EMAIL_BLOQUEADO',
+                            'BLOQUEADO',
+                            "Bloqueo por correo activo. Restan {$remainingSeconds} segundos.",
+                            $userAgent
+                        );
+
+                        $error = "La cuenta tiene demasiados intentos fallidos. Espere {$remainingSeconds} segundos.";
+                        require_once '../app/views/auth/login.php';
+                        return;
+                    }
+                }
+
+                
 
             if ($intentoLogin && !empty($intentoLogin['blocked_until'])) {
                 $blockedUntil = strtotime($intentoLogin['blocked_until']);
@@ -73,7 +184,7 @@ class AuthController {
 
             } elseif ($usuario) {
                 $usuarioModel->limpiarIntentosLogin($email, $ip);
-
+                $usuarioModel->limpiarIntentosPorEmail($email);
                 $usuarioModel->registrarAuditoriaAuth(
                     $usuario['id'],
                     $email,
@@ -128,6 +239,32 @@ class AuthController {
                 }
 
                 $usuarioModel->registrarIntentoFallidoLogin($email, $ip, $attempts, $blockedUntil);
+
+                
+                    $bloqueoEmail = $usuarioModel->obtenerBloqueoPorEmail($email);
+                    $emailAttempts = $bloqueoEmail ? ((int)$bloqueoEmail['attempts'] + 1) : 1;
+
+                    $emailBlockedUntil = null;
+
+                    if ($emailAttempts >= 5) {
+                        $emailBlockedUntil = date('Y-m-d H:i:s', time() + 900); // 15 minutos
+                    }
+
+                    $usuarioModel->registrarIntentoFallidoPorEmail($email, $emailAttempts, $emailBlockedUntil);
+
+                    if ($emailBlockedUntil !== null) {
+                            error_log("EMAIL_BLOQUEADO IP={$ip} EMAIL={$email} ATTEMPTS={$emailAttempts}");
+
+                        $usuarioModel->registrarAuditoriaAuth(
+                            null,
+                            $email,
+                            $ip,
+                            'EMAIL_BLOQUEADO',
+                            'BLOQUEADO',
+                            "Cuenta bloqueada por {$emailAttempts} intentos fallidos desde múltiples orígenes.",
+                            $userAgent
+                        );
+                    }
 
                 error_log("LOGIN_FALLIDO IP={$ip} EMAIL={$email} ATTEMPT={$attempts} DELAY={$delay} UA={$userAgent}");
 

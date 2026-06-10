@@ -195,7 +195,7 @@ public function limpiarIntentosLogin($email, $ip) {
                 (:usuario_id, :email, :ip, :evento, :resultado, :detalle, :user_agent)";
 
         $stmt = $this->conn->prepare($query);
-        $stmt->bindParam(":usuario_id", $usuarioId);
+        $stmt->bindValue(":usuario_id", $usuarioId, $usuarioId === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
         $stmt->bindParam(":email", $email);
         $stmt->bindParam(":ip", $ip);
         $stmt->bindParam(":evento", $evento);
@@ -207,5 +207,59 @@ public function limpiarIntentosLogin($email, $ip) {
 }
 
 
+        public function obtenerBloqueoPorEmail($email) {
+            $query = "SELECT * FROM email_lockouts WHERE email = :email LIMIT 1";
+            $stmt = $this->conn->prepare($query);
+            $stmt->bindParam(":email", $email);
+            $stmt->execute();
+            return $stmt->fetch(PDO::FETCH_ASSOC);
+        }
 
-}
+        public function registrarIntentoFallidoPorEmail($email, $attempts, $blockedUntil = null) {
+            $query = "INSERT INTO email_lockouts (email, attempts, blocked_until, last_attempt_at)
+                    VALUES (:email, :attempts, :blocked_until, NOW())
+                    ON DUPLICATE KEY UPDATE
+                        attempts = :attempts_update,
+                        blocked_until = :blocked_until_update,
+                        last_attempt_at = NOW()";
+
+            $stmt = $this->conn->prepare($query);
+            $stmt->bindParam(":email", $email);
+            $stmt->bindParam(":attempts", $attempts);
+            $stmt->bindParam(":blocked_until", $blockedUntil);
+            $stmt->bindParam(":attempts_update", $attempts);
+            $stmt->bindParam(":blocked_until_update", $blockedUntil);
+
+            return $stmt->execute();
+        }
+
+        public function limpiarIntentosPorEmail($email) {
+            $query = "DELETE FROM email_lockouts WHERE email = :email";
+            $stmt = $this->conn->prepare($query);
+            $stmt->bindParam(":email", $email);
+            return $stmt->execute();
+        }
+
+            public function detectarAtaqueDistribuido($minutos = 5, $minEventos = 10, $minEmails = 5, $minIps = 3) {
+            $query = "SELECT 
+                        COUNT(*) AS total_eventos,
+                        COUNT(DISTINCT email) AS emails_distintos,
+                        COUNT(DISTINCT ip) AS ips_distintas
+                    FROM auth_audit_log
+                    WHERE evento = 'LOGIN_FALLIDO'
+                    AND created_at >= DATE_SUB(NOW(), INTERVAL :minutos MINUTE)";
+
+            $stmt = $this->conn->prepare($query);
+            $stmt->bindValue(":minutos", (int)$minutos, PDO::PARAM_INT);
+            $stmt->execute();
+
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            return (
+                (int)$row['total_eventos'] >= $minEventos &&
+                (int)$row['emails_distintos'] >= $minEmails &&
+                (int)$row['ips_distintas'] >= $minIps
+            );
+        }
+
+        }
