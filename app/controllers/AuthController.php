@@ -71,23 +71,35 @@ class AuthController {
                     '/;/'
                 ];
 
-                foreach ($sqliPatterns as $pattern) {
-                    if (preg_match($pattern, $email)) {
-                        error_log("SQLI_DETECTADO IP={$ip} EMAIL={$email} UA={$userAgent}");
+                $inputsToInspect = [
+                    'POST_email' => $email,
+                    'POST_password' => $password,
+                    'GET_query' => $_SERVER['QUERY_STRING'] ?? '',
+                    'REQUEST_URI' => $_SERVER['REQUEST_URI'] ?? ''
+                ];
 
-                        $usuarioModel->registrarAuditoriaAuth(
-                            null,
-                            $email,
-                            $ip,
-                            'SQLI_DETECTADO',
-                            'BLOQUEADO',
-                            'Patrón SQL Injection detectado en campo email',
-                            $userAgent
-                        );
+                foreach ($inputsToInspect as $source => $value) {
+                    $decodedValue = urldecode((string)$value);
 
-                        $error = "Solicitud inválida.";
-                        require_once '../app/views/auth/login.php';
-                        return;
+                    foreach ($sqliPatterns as $pattern) {
+                        if (preg_match($pattern, $decodedValue)) {
+                            error_log("SQLI_DETECTADO IP={$ip} SOURCE={$source} VALUE={$decodedValue} UA={$userAgent}");
+
+                            $usuarioModel->registrarAuditoriaAuth(
+                                null,
+                                $email ?: null,
+                                $ip,
+                                'SQLI_DETECTADO',
+                                'BLOQUEADO',
+                                "Patrón SQL Injection detectado en {$source}",
+                                $userAgent
+                            );
+
+                            http_response_code(400);
+                            $error = "Solicitud inválida.";
+                            require_once '../app/views/auth/login.php';
+                            return;
+                        }
                     }
                 }
 
