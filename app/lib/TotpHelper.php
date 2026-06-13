@@ -20,7 +20,7 @@ class TotpHelper
         return "otpauth://totp/{$issuer}:{$accountName}?secret={$secret}&issuer={$issuer}&algorithm=SHA1&digits=6&period=30";
     }
 
-    public static function verifyCode($secret, $code, $discrepancy = 1, $currentTimeSlice = null)
+    public static function verifyCode($secret, $code, $discrepancy = 0, $currentTimeSlice = null)
     {
         if ($currentTimeSlice === null) {
             $currentTimeSlice = floor(time() / 30);
