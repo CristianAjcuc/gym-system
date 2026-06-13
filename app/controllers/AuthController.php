@@ -77,7 +77,22 @@ class AuthController {
             $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? 'N/A';
 
             $usuarioModel = new Usuario();
-    
+            $sqliDistribuido = $usuarioModel->detectarSqliDistribuido(5, 20, 10);
+
+                if ($sqliDistribuido) {
+                    $this->asegurarCaptchaLogin();
+
+                    $usuarioModel->registrarAuditoriaAuth(
+                        null,
+                        $email ?: null,
+                        $ip,
+                        'MODO_PROTECCION',
+                        'ACTIVO',
+                        'Captcha obligatorio activado por patrón de SQLi distribuido.',
+                        $userAgent
+                    );
+                }
+                    
 
             $modoProteccion = $usuarioModel->detectarModoProteccion(5, 10, 3);
 
