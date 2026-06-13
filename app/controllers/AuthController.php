@@ -151,7 +151,11 @@ class AuthController {
                     foreach ($sqliPatterns as $pattern) {
                         if (preg_match($pattern, $decodedValue)) {
                             error_log("SQLI_DETECTADO IP={$ip} SOURCE={$source} VALUE={$decodedValue} UA={$userAgent}");
-
+                            file_put_contents(
+                            '/var/log/gym-auth.log',
+                            date('Y-m-d H:i:s') . " SQLI_DETECTADO IP={$ip} SOURCE={$source}" . PHP_EOL,
+                            FILE_APPEND | LOCK_EX
+                        );
                             $usuarioModel->registrarAuditoriaAuth(
                                 null,
                                 $email ?: null,
