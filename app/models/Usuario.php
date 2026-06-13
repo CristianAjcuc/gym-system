@@ -262,4 +262,25 @@ public function limpiarIntentosLogin($email, $ip) {
             );
         }
 
+        public function detectarModoProteccion($minutos = 5, $minEventos = 10, $minIps = 3) {
+    $query = "SELECT
+                COUNT(*) AS total_eventos,
+                COUNT(DISTINCT ip) AS ips_distintas
+              FROM auth_audit_log
+              WHERE evento IN ('SQLI_DETECTADO', 'INPUT_INVALIDO')
+              AND created_at >= DATE_SUB(NOW(), INTERVAL :minutos MINUTE)";
+
+    $stmt = $this->conn->prepare($query);
+    $stmt->bindValue(":minutos", (int)$minutos, PDO::PARAM_INT);
+    $stmt->execute();
+
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return (
+        (int)$row['total_eventos'] >= $minEventos &&
+        (int)$row['ips_distintas'] >= $minIps
+    );
+}
+
+
         }

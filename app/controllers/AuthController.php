@@ -5,21 +5,53 @@ require_once '../app/lib/CryptoHelper.php';
 
 class AuthController {
 
-        public function index() {
-            $usuarioModel = new Usuario();
-            $usuarioModel->crearAdmin();
+            private function generarCaptchaLogin() {
+                $a = random_int(1, 9);
+                $b = random_int(1, 9);
 
-            if (isset($_SESSION['user_id'])) {
-                header('Location: /home/index');
-                exit;
+                $_SESSION['captcha_question'] = "{$a} + {$b}";
+                $_SESSION['captcha_answer'] = (string)($a + $b);
             }
 
-            if (empty($_SESSION['csrf_token'])) {
-                $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+            private function asegurarCaptchaLogin() {
+                $_SESSION['captcha_required'] = true;
+
+                if (
+                    empty($_SESSION['captcha_question']) ||
+                    empty($_SESSION['captcha_answer'])
+                ) {
+                    $this->generarCaptchaLogin();
+                }
             }
 
-            require_once '../app/views/auth/login.php';
-        }
+            private function limpiarCaptchaLogin() {
+                unset(
+                    $_SESSION['captcha_required'],
+                    $_SESSION['captcha_question'],
+                    $_SESSION['captcha_answer']
+                );
+            }
+
+
+            public function index() {
+                $usuarioModel = new Usuario();
+                $usuarioModel->crearAdmin();
+
+                if (isset($_SESSION['user_id'])) {
+                    header('Location: /home/index');
+                    exit;
+                }
+
+                if (empty($_SESSION['csrf_token'])) {
+                    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+                }
+
+                if (!empty($_SESSION['captcha_required'])) {
+                    $this->asegurarCaptchaLogin();
+                }
+
+                require_once '../app/views/auth/login.php';
+            }
 
     public function login() {
         if ($_SERVER['REQUEST_METHOD'] == 'POST') {
@@ -39,12 +71,32 @@ class AuthController {
                 }
 
 
-                $email = trim($_POST['email'] ?? '');
-                $password = $_POST['password'] ?? '';
-                $ip = $_SERVER['REMOTE_ADDR'] ?? 'N/A';
-                $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? 'N/A';
+            $email = trim($_POST['email'] ?? '');
+            $password = $_POST['password'] ?? '';
+            $ip = $_SERVER['REMOTE_ADDR'] ?? 'N/A';
+            $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? 'N/A';
 
-                $usuarioModel = new Usuario();
+            $usuarioModel = new Usuario();
+    
+
+            $modoProteccion = $usuarioModel->detectarModoProteccion(5, 10, 3);
+
+            if ($modoProteccion) {
+
+                error_log("MODO_PROTECCION_ACTIVO IP={$ip}");
+
+                $this->asegurarCaptchaLogin();
+
+                $usuarioModel->registrarAuditoriaAuth(
+                    null,
+                    $email ?: null,
+                    $ip,
+                    'MODO_PROTECCION',
+                    'ACTIVO',
+                    'Captcha requerido por múltiples eventos sospechosos.',
+                    $userAgent
+                );
+            }
 
                 /*
                 * Detección temprana de patrones SQL Injection.
@@ -123,24 +175,30 @@ class AuthController {
                 }
 
                 $intentoLogin = $usuarioModel->obtenerIntentoLogin($email, $ip);
-                    if ($usuarioModel->detectarAtaqueDistribuido(5, 20, 10, 5)) {
-                    error_log("ATAQUE_DISTRIBUIDO IP={$ip} EMAIL={$email}");
+              if (!empty($_SESSION['captcha_required'])) {
+                    $captcha = trim($_POST['captcha'] ?? '');
 
-                    $usuarioModel->registrarAuditoriaAuth(
-                        null,
-                        $email,
-                        $ip,
-                        'ATAQUE_DISTRIBUIDO',
-                        'BLOQUEADO',
-                        'Alto volumen de intentos fallidos contra múltiples cuentas e IPs.',
-                        $userAgent
-                    );
+                    if (
+                        empty($_SESSION['captcha_answer']) ||
+                        !hash_equals((string)$_SESSION['captcha_answer'], $captcha)
+                    ) {
+                        $this->generarCaptchaLogin();
 
-                    $error = "Demasiados intentos detectados. Intente más tarde.";
-                    require_once '../app/views/auth/login.php';
-                    return;
+                        $usuarioModel->registrarAuditoriaAuth(
+                            null,
+                            $email ?: null,
+                            $ip,
+                            'CAPTCHA_FALLIDO',
+                            'BLOQUEADO',
+                            'Captcha requerido no superado.',
+                            $userAgent
+                        );
+
+                        $error = "Debe completar correctamente el CAPTCHA.";
+                        require_once '../app/views/auth/login.php';
+                        return;
+                    }
                 }
-
 
 
                 $bloqueoEmail = $usuarioModel->obtenerBloqueoPorEmail($email);
@@ -177,7 +235,11 @@ class AuthController {
                 if ($blockedUntil > time()) {
                     $remainingSeconds = $blockedUntil - time();
 
-                    error_log("LOGIN_BLOQUEADO IP={$ip} EMAIL={$email} REMAINING_SECONDS={$remainingSeconds}");
+                    error_log(
+                        date('Y-m-d H:i:s') . " LOGIN_BLOQUEADO IP={$ip} EMAIL={$email} REMAINING_SECONDS={$remainingSeconds}" . PHP_EOL,
+                        3,
+                        '/var/log/gym-auth.log'
+                    );
 
                     $usuarioModel->registrarAuditoriaAuth(
                         null,
@@ -205,6 +267,7 @@ class AuthController {
             } elseif ($usuario) {
                 $usuarioModel->limpiarIntentosLogin($email, $ip);
                 $usuarioModel->limpiarIntentosPorEmail($email);
+                $this->limpiarCaptchaLogin();
                 $usuarioModel->registrarAuditoriaAuth(
                     $usuario['id'],
                     $email,
@@ -248,6 +311,9 @@ class AuthController {
 
             } else {
                 $attempts = $intentoLogin ? ((int)$intentoLogin['attempts'] + 1) : 1;
+                if ($attempts >= 3) {
+                    $this->asegurarCaptchaLogin();
+                }
 
                 $loginDelays = [1 => 0, 2 => 0, 3 => 0, 4 => 10, 5 => 30, 6 => 60];
                 $delay = $loginDelays[$attempts] ?? 60;

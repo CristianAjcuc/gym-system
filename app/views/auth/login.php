@@ -62,19 +62,31 @@ $config = Configuracion::getInfo();
                 <div class="alert alert-danger text-center"><?= $error ?></div>
             <?php endif; ?>
 
-            <form id="login-form" action="/auth/login" method="POST">
-                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                    <form id="login-form" action="/auth/login" method="POST">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
 
-                <div class="mb-3">
-                    <label class="form-label text-secondary">Correo Electrónico</label>
-                    <input type="email" name="email" id="email" class="form-control form-control-lg" placeholder="admin@irongym.com" required>
-                </div>
-                <div class="mb-4">
-                    <label class="form-label text-secondary">Contraseña</label>
-                    <input type="password" name="password" id="password" class="form-control form-control-lg" placeholder="******" required>
-                </div>
-                <button type="submit" id="login-button" class="btn btn-primary w-100 btn-lg">INGRESAR</button>
-            </form>
+                        <div class="mb-3">
+                            <label class="form-label text-secondary">Correo Electrónico</label>
+                            <input type="email" name="email" id="email" class="form-control form-control-lg" placeholder="admin@irongym.com" required>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label text-secondary">Contraseña</label>
+                            <input type="password" name="password" id="password" class="form-control form-control-lg" placeholder="******" required>
+                        </div>
+
+                        <?php if (!empty($_SESSION['captcha_required'])): ?>
+                            <div class="mb-4">
+                                <label class="form-label text-secondary">
+                                    Verificación de seguridad: ¿Cuánto es <?= htmlspecialchars($_SESSION['captcha_question'] ?? '0 + 0', ENT_QUOTES, 'UTF-8') ?>?
+                                </label>
+                                <input type="text" name="captcha" id="captcha" class="form-control form-control-lg" placeholder="Respuesta" required>
+                                <small class="text-muted">Se activó por actividad sospechosa detectada.</small>
+                            </div>
+                        <?php endif; ?>
+
+                        <button type="submit" id="login-button" class="btn btn-primary w-100 btn-lg">INGRESAR</button>
+                    </form>
         </div>
         
         <div class="card-footer text-center bg-light py-3">
